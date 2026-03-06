@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 
-
+import db
 from domains.utils import read_frontmatter
 from fastapi import APIRouter, HTTPException
 
@@ -43,6 +43,9 @@ async def _scrape_all(domain: str, task_id: str, scrape_key: str, *, force: bool
                 page_data = await scrape_page(entry.url, name=entry.name)
                 md_content = page_to_markdown(page_data)
                 save_markdown(md_content, data_dir, entry.slug)
+                pool = db.get_pool()
+                if pool:
+                    await db.upsert_page(pool, domain, entry.slug, name=page_data.name, url=page_data.url, page_last_reviewed=page_data.page_last_reviewed or "", next_review_due=page_data.next_review_due or "", markdown=md_content)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -69,6 +72,9 @@ async def _scrape_one(domain: str, slug: str, task_id: str, scrape_key: str) -> 
         page_data = await scrape_page(url, name=slug)
         md_content = page_to_markdown(page_data)
         save_markdown(md_content, cfg["data_dir"], slug)
+        pool = db.get_pool()
+        if pool:
+            await db.upsert_page(pool, domain, slug, name=page_data.name, url=page_data.url, page_last_reviewed=page_data.page_last_reviewed or "", next_review_due=page_data.next_review_due or "", markdown=md_content)
         update_task(task_id, status="completed", done=1, message="Done")
     except asyncio.CancelledError:
         pass
@@ -125,6 +131,9 @@ async def _update_stale(domain: str, task_id: str, scrape_key: str) -> None:
                 page_data = await scrape_page(url, name=slug)
                 md_content = page_to_markdown(page_data)
                 save_markdown(md_content, data_dir, slug)
+                pool = db.get_pool()
+                if pool:
+                    await db.upsert_page(pool, domain, slug, name=page_data.name, url=page_data.url, page_last_reviewed=page_data.page_last_reviewed or "", next_review_due=page_data.next_review_due or "", markdown=md_content)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -225,6 +234,10 @@ def create_domain_router(domain: str, prefix: str) -> APIRouter:
         description=f"List all previously scraped {label} from the local cache. Returns slug and name for each item.",
     )
     async def list_items() -> list[ItemSummary]:
+        pool = db.get_pool()
+        if pool:
+            rows = await db.list_pages(pool, domain)
+            return [ItemSummary(slug=r["slug"], name=r["name"]) for r in rows]
         data_dir: Path = cfg["data_dir"]
         if not data_dir.exists():
             return []
@@ -244,6 +257,19 @@ def create_domain_router(domain: str, prefix: str) -> APIRouter:
         description=f"Retrieve the full markdown content and metadata for a single scraped {domain.rstrip('s')}.",
     )
     async def get_item(slug: str) -> ItemContent:
+        pool = db.get_pool()
+        if pool:
+            row = await db.get_page(pool, domain, slug)
+            if row is None:
+                raise HTTPException(404, f"{slug} not found")
+            return ItemContent(
+                slug=row["slug"],
+                name=row["name"],
+                url=row["url"],
+                page_last_reviewed=row["page_last_reviewed"],
+                next_review_due=row["next_review_due"],
+                markdown=row["markdown"],
+            )
         path: Path = cfg["data_dir"] / f"{slug}.md"
         if not path.exists():
             raise HTTPException(404, f"{slug} not found")
@@ -264,6 +290,15 @@ def create_domain_router(domain: str, prefix: str) -> APIRouter:
         description=f"Remove a scraped {domain.rstrip('s')} markdown file from the local cache.",
     )
     async def delete_item(slug: str) -> dict:
+        pool = db.get_pool()
+        if pool:
+            deleted = await db.delete_page(pool, domain, slug)
+            if not deleted:
+                raise HTTPException(404, f"{slug} not found")
+            path: Path = cfg["data_dir"] / f"{slug}.md"
+            if path.exists():
+                path.unlink()
+            return {"deleted": slug}
         path: Path = cfg["data_dir"] / f"{slug}.md"
         if not path.exists():
             raise HTTPException(404, f"{slug} not found")
