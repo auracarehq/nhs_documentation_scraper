@@ -11,4 +11,4 @@ RUN uv sync --frozen --no-install-project 2>/dev/null || uv sync --no-install-pr
 
 COPY . .
 
-EXPOSE 8000
+EXPOSE 8888
