@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 
 import db
 from domains.models import SearchResult, TaskStatusResponse
+from mcp_server import mcp
 from domains.dmd.router import router as dmd_router
 from domains.icd.router import router as icd_router
 from domains.mhra.safety_updates.router import router as mhra_dsu_router
@@ -67,6 +68,9 @@ app.include_router(icd_router)
 
 # dm+d
 app.include_router(dmd_router)
+
+# MCP server (SSE transport) — mount last so REST routes take priority
+app.mount("/mcp", mcp.sse_app())
 
 
 @app.get(
