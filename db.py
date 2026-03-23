@@ -293,20 +293,17 @@ async def cache_icd11_concept(
         await session.commit()
 
 
-async def get_icd11_concept(entity_id: str) -> dict | None:
-    """Fetch a single cached ICD-11 concept by entity ID."""
-    async with get_session() as session:
-        row = await session.get(Icd11Concept, entity_id)
-        if row is None:
-            return None
-        return {"entity_id": row.entity_id, "icd_code": row.icd_code, "title": row.title,
-                "definition": row.definition, "raw_json": row.raw_json, "cached_at": row.cached_at}
-
-
 def _icd_row_to_dict(r: Icd11Concept) -> dict:
     """Convert an Icd11Concept ORM row to a plain dict."""
     return {"entity_id": r.entity_id, "icd_code": r.icd_code, "title": r.title,
             "definition": r.definition, "raw_json": r.raw_json, "cached_at": r.cached_at}
+
+
+async def get_icd11_concept(entity_id: str) -> dict | None:
+    """Fetch a single cached ICD-11 concept by entity ID."""
+    async with get_session() as session:
+        row = await session.get(Icd11Concept, entity_id)
+        return _icd_row_to_dict(row) if row else None
 
 
 async def list_icd11_concepts() -> list[dict]:
@@ -354,20 +351,17 @@ async def cache_dmd_product(
         await session.commit()
 
 
-async def get_dmd_product(dmd_id: str) -> dict | None:
-    """Fetch a single cached dm+d product by ID."""
-    async with get_session() as session:
-        row = await session.get(DmdProduct, dmd_id)
-        if row is None:
-            return None
-        return {"dmd_id": row.dmd_id, "name": row.name, "concept_type": row.concept_type,
-                "bnf_code": row.bnf_code, "raw_json": row.raw_json, "cached_at": row.cached_at}
-
-
 def _dmd_row_to_dict(r: DmdProduct) -> dict:
     """Convert a DmdProduct ORM row to a plain dict."""
     return {"dmd_id": r.dmd_id, "name": r.name, "concept_type": r.concept_type,
             "bnf_code": r.bnf_code, "raw_json": r.raw_json, "cached_at": r.cached_at}
+
+
+async def get_dmd_product(dmd_id: str) -> dict | None:
+    """Fetch a single cached dm+d product by ID."""
+    async with get_session() as session:
+        row = await session.get(DmdProduct, dmd_id)
+        return _dmd_row_to_dict(row) if row else None
 
 
 async def list_dmd_products() -> list[dict]:
