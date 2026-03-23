@@ -1,23 +1,5 @@
-"""NHS-specific response models."""
+"""NHS response models — re-exported from the shared domains.models module."""
 
-from __future__ import annotations
+from domains.models import ItemContent, ItemSummary
 
-from pydantic import BaseModel
-
-
-class ItemSummary(BaseModel):
-    """Slug and name of a scraped item."""
-
-    slug: str
-    name: str
-
-
-class ItemContent(BaseModel):
-    """Full content and metadata of a scraped item."""
-
-    slug: str
-    name: str
-    url: str
-    page_last_reviewed: str
-    next_review_due: str
-    markdown: str
+__all__ = ["ItemContent", "ItemSummary"]

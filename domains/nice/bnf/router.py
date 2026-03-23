@@ -5,8 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import db
-from domains.models import TaskResponse
-from domains.nhs.models import ItemContent, ItemSummary
+from domains.models import ItemContent, ItemSummary, TaskResponse
 from domains.nice.service import scrape_all, scrape_one
 from fastapi import APIRouter, HTTPException
 from tasks import create_task, get_active_scrape, register_async_task, set_active_scrape

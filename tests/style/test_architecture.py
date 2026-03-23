@@ -7,8 +7,7 @@ from tests.style.conftest import join_violations, load_python_files
 LAYER_RULES: list[tuple[str, list[str], str]] = [
     # (file prefix, forbidden import prefixes, reason)
     ("scraper/", ["domains", "tasks", "main"], "scraper must not import from domains, tasks, or main"),
-    ("domains/models.py", ["scraper", "db", "tasks", "main"], "domain models must stay dependency-free"),
-    ("domains/nhs/models.py", ["scraper", "db", "tasks", "main"], "NHS models must stay dependency-free"),
+    ("domains/models.py", ["scraper", "db", "tasks", "main"], "shared domain models must stay dependency-free"),
     ("domains/nhs/config.py", ["scraper", "db", "tasks", "main"], "NHS config must stay dependency-free"),
     ("domains/nice/config.py", ["scraper", "db", "tasks", "main"], "NICE config must stay dependency-free"),
     ("domains/mhra/config.py", ["scraper", "db", "tasks", "main"], "MHRA config must stay dependency-free"),

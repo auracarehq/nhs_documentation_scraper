@@ -1,7 +1,9 @@
 """SNOMED CT Snowstorm API configuration."""
 
-# Public IHTSDO Snowstorm browser instance — suitable for testing/development.
-# For production, point at the NHS ontology server or a self-hosted Snowstorm.
+# Public IHTSDO Snowstorm browser instance.
+# All requests go through scraper.client.fetch() which enforces MAX_CONCURRENT
+# and REQUEST_DELAY, so the shared rate limiter already applies here.
+# For a self-hosted or NHS ontology server, update SNOWSTORM_BASE only.
 SNOWSTORM_BASE = "https://browser.ihtsdotools.org/snowstorm/snomed-ct"
 
 # SNOMED CT UK Clinical Edition branch

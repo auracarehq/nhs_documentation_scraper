@@ -1,13 +1,17 @@
-# NHS Health A-Z Scraper
+# Clinical Knowledge Scraper
 
-A FastAPI web scraper that extracts content from the [NHS Health A-Z](https://www.nhs.uk/conditions/) website and stores it in PostgreSQL as markdown with YAML frontmatter metadata.
+A FastAPI service that scrapes clinical guidance sources and stores content in PostgreSQL as markdown with YAML frontmatter. Built for use as a knowledge backend for clinical applications.
 
-Covers four domains:
+## Sources
 
-- **Conditions** — `/conditions/`
-- **Symptoms** — `/symptoms/`
-- **Medicines** — `/medicines/`
-- **Tests & Treatments** — `/treatments/`
+| Source | Route prefix | Method | Content |
+|---|---|---|---|
+| [NHS Health A-Z](https://www.nhs.uk) | `/conditions/` `/symptoms/` `/medicines/` `/treatments/` | HTML scrape | Conditions, symptoms, medicines, treatments |
+| [NICE CKS](https://cks.nice.org.uk) | `/nice/cks/` | HTML scrape | Clinical Knowledge Summaries (380+ topics) |
+| [NICE BNF](https://bnf.nice.org.uk) | `/nice/bnf/` | HTML scrape | British National Formulary drug monographs |
+| [NICE BNFc](https://bnfc.nice.org.uk) | `/nice/bnfc/` | HTML scrape | BNF for Children drug monographs |
+| [MHRA Drug Safety Updates](https://www.gov.uk/drug-safety-update) | `/mhra/drug-safety-updates/` | GOV.UK Content API (JSON) | Drug safety alerts |
+| [SNOMED CT UK Edition](https://browser.ihtsdotools.org) | `/snomed/` | Snowstorm REST API | Concept search + local cache |
 
 ## Quick Start
 
@@ -15,47 +19,63 @@ Covers four domains:
 make up
 ```
 
-The API is available at **http://localhost:8888** and interactive Swagger docs at **http://localhost:8888/docs**.
+API at **http://localhost:8888** — Swagger docs at **http://localhost:8888/docs**.
 
-## Makefile Targets
+## Makefile
 
-| Target       | Description                              |
-|--------------|------------------------------------------|
-| `make up`    | Build and start API + Postgres           |
-| `make down`  | Stop all services                        |
-| `make build` | Build Docker images                      |
-| `make test`  | Run all tests (style + unit)             |
-| `make logs`  | Tail service logs                        |
-| `make clean` | Stop services and remove volumes         |
+| Target | Description |
+|---|---|
+| `make up` | Build and start API + Postgres |
+| `make down` | Stop all services |
+| `make build` | Build Docker images only |
+| `make test` | Run all tests (style + unit) |
+| `make logs` | Tail service logs |
+| `make clean` | Stop services and remove volumes |
 
-## API Usage
+## API
 
-### Scrape content
+All scrapers run as background tasks. The workflow is always:
 
-Start a background scrape of an entire domain:
+1. `POST /{domain}/scrape` → `{"task_id": "a1b2c3d4e5f6"}`
+2. `GET /tasks/{task_id}` → poll until `status` is `completed` or `failed`
+3. `GET /{domain}/` → list scraped items; `GET /{domain}/{slug}` → full content
+
+### Scrape a whole domain
 
 ```bash
+# NHS conditions
 curl -X POST http://localhost:8888/conditions/scrape
-# {"task_id": "a1b2c3d4e5f6"}
+
+# NICE CKS topics
+curl -X POST http://localhost:8888/nice/cks/scrape
+
+# NICE BNF drugs
+curl -X POST http://localhost:8888/nice/bnf/scrape
+
+# MHRA Drug Safety Updates (fetches from GOV.UK JSON API, no HTML scraping)
+curl -X POST http://localhost:8888/mhra/drug-safety-updates/scrape
 ```
 
-Items that have already been scraped are **skipped by default**. To force a full re-scrape:
+Items already in the database are skipped. Force a full re-scrape:
 
 ```bash
 curl -X POST "http://localhost:8888/conditions/scrape?force=true"
 ```
 
-Scrape a single item by slug:
+### Scrape a single item
 
 ```bash
 curl -X POST http://localhost:8888/conditions/scrape/acne
+curl -X POST http://localhost:8888/nice/cks/scrape/acne
+curl -X POST http://localhost:8888/nice/bnf/scrape/metformin-hydrochloride
+curl -X POST "http://localhost:8888/mhra/drug-safety-updates/scrape/some-article-slug"
 ```
 
-Duplicate scrape requests are rejected with `409 Conflict` if a scrape for the same domain or slug is already running.
+Duplicate requests return `409 Conflict` if the same domain or slug is already running.
 
-### Update stale pages
+### Update stale pages (NHS only)
 
-Re-scrape only items whose `next_review_due` date has passed:
+Re-scrape items whose `next_review_due` date has passed:
 
 ```bash
 curl -X POST http://localhost:8888/conditions/update
@@ -65,10 +85,10 @@ curl -X POST http://localhost:8888/conditions/update
 
 ```bash
 curl http://localhost:8888/tasks/{task_id}
-# {"task_id": "...", "status": "running", "done": 42, "total": 950, ...}
+# {"task_id": "...", "status": "running", "done": 42, "total": 380, "message": "..."}
 ```
 
-Status values: `pending` → `running` → `completed` / `failed` / `cancelled`.
+Status: `pending` → `running` → `completed` / `failed` / `cancelled`
 
 ### Cancel a running task
 
@@ -79,23 +99,150 @@ curl -X POST http://localhost:8888/tasks/{task_id}/cancel
 ### Browse scraped content
 
 ```bash
-# List all scraped items in a domain
-curl http://localhost:8888/conditions/
+# List all items in a domain
+curl http://localhost:8888/nice/cks/
+curl http://localhost:8888/nice/bnf/
+curl http://localhost:8888/mhra/drug-safety-updates/
 
 # Get full markdown + metadata for one item
-curl http://localhost:8888/conditions/acne
+curl http://localhost:8888/nice/cks/acne
+curl http://localhost:8888/nice/bnf/metformin-hydrochloride
 
-# Delete a scraped item
-curl -X DELETE http://localhost:8888/conditions/acne
+# Delete an item
+curl -X DELETE http://localhost:8888/nice/cks/acne
 ```
 
-### Search across domains
+### Search across all domains
 
 ```bash
-curl "http://localhost:8888/search?q=acne"
+curl "http://localhost:8888/search?q=metformin"
+# Returns matches from all scraped sources (NHS + NICE + MHRA)
 ```
 
-All four domains (`/conditions/`, `/symptoms/`, `/medicines/`, `/treatments/`) expose the same endpoints.
+### SNOMED CT
+
+SNOMED is different: it's a live API proxy with an optional local cache, not a bulk scrape.
+
+```bash
+# Search by clinical term (always hits the Snowstorm API)
+curl "http://localhost:8888/snomed/concepts?q=diabetes+mellitus"
+curl "http://localhost:8888/snomed/concepts?q=metformin&limit=10"
+
+# Get a concept by ID — returned from cache if present, fetched and cached otherwise
+curl http://localhost:8888/snomed/concepts/73211009
+
+# Force-refresh a specific concept in the cache
+curl -X POST http://localhost:8888/snomed/concepts/73211009/cache
+
+# List all locally cached concepts
+curl http://localhost:8888/snomed/cached
+
+# Remove a concept from the cache
+curl -X DELETE http://localhost:8888/snomed/concepts/73211009
+```
+
+Search returns `concept_id`, `preferred_term`, `fsn` (fully specified name), and `active`. The hierarchy tag (`disorder`, `procedure`, `substance`, etc.) is extracted from the FSN and stored on cached concepts.
+
+## Rate Limiting
+
+All outbound HTTP requests — NHS, NICE, MHRA, and SNOMED — go through a single shared client (`scraper/client.py`) that enforces:
+
+- **`MAX_CONCURRENT = 3`** concurrent requests (semaphore)
+- **`REQUEST_DELAY = 0.5s`** pause after each request
+
+Adjust both values in `config.py`. The SNOMED Snowstorm instance used is the public IHTSDO browser API; the shared rate limiter keeps usage within reasonable bounds.
+
+## Project Structure
+
+```
+├── main.py                               # FastAPI app, lifespan, search + task endpoints
+├── config.py                             # Shared rate-limiting config (MAX_CONCURRENT, REQUEST_DELAY)
+├── db.py                                 # SQLAlchemy async ORM; scraped_pages + snomed_concepts tables
+├── tasks.py                              # In-memory background task store
+│
+├── scraper/                              # Source-independent HTTP + parsing layer
+│   ├── client.py                         # Rate-limited httpx client (shared by all sources)
+│   ├── index.py                          # NHS A-Z index page parser
+│   ├── page.py                           # Detail page + sub-tab parser (reused by NICE)
+│   └── markdown.py                       # HTML → markdown + YAML frontmatter
+│
+├── domains/
+│   ├── models.py                         # Shared models: ItemSummary, ItemContent, TaskResponse, SearchResult
+│   │
+│   ├── nhs/                              # NHS Health A-Z
+│   │   ├── config.py                     # Base URL + domain registry
+│   │   ├── service.py                    # scrape_all, scrape_one, update_stale
+│   │   ├── conditions/router.py
+│   │   ├── symptoms/router.py
+│   │   ├── medicines/router.py
+│   │   └── treatments/router.py
+│   │
+│   ├── nice/                             # NICE (CKS, BNF, BNFc)
+│   │   ├── config.py                     # Base URLs + domain registry
+│   │   ├── scraper.py                    # NICE-specific index parser (different link structure to NHS)
+│   │   ├── service.py                    # scrape_all, scrape_one (reuses scraper.page for content)
+│   │   ├── cks/router.py
+│   │   ├── bnf/router.py
+│   │   └── bnfc/router.py
+│   │
+│   ├── mhra/                             # MHRA Drug Safety Updates
+│   │   ├── config.py                     # GOV.UK API endpoints
+│   │   ├── client.py                     # GOV.UK search + Content API (JSON)
+│   │   ├── service.py                    # Paginated fetch, HTML body → markdown
+│   │   └── safety_updates/router.py
+│   │
+│   └── snomed/                           # SNOMED CT
+│       ├── config.py                     # Snowstorm base URL + UK branch
+│       ├── models.py                     # ConceptSummary, ConceptDetail, ConceptSearchResult
+│       ├── client.py                     # Snowstorm REST API calls
+│       ├── service.py                    # search (live), fetch_and_cache, get_or_fetch
+│       └── router.py
+│
+├── tests/                                # Unit tests
+│   └── style/                            # AST-based style tests (complexity, architecture, security, dead code)
+├── Dockerfile
+├── docker-compose.yml
+└── Makefile
+```
+
+## Architecture
+
+```
+                    ┌─────────────────────────────────────────────┐
+                    │               FastAPI (main.py)             │
+                    └───────────────────┬─────────────────────────┘
+                                        │
+          ┌─────────────────────────────┼──────────────────────────┐
+          │                             │                          │
+    ┌─────▼──────┐              ┌───────▼──────┐           ┌──────▼──────┐
+    │  NHS/NICE  │              │     MHRA     │           │   SNOMED    │
+    │  service   │              │   service    │           │   service   │
+    └─────┬──────┘              └──────┬───────┘           └──────┬──────┘
+          │                            │                          │
+    ┌─────▼──────┐              ┌──────▼───────┐           ┌──────▼──────┐
+    │  scraper/  │              │ mhra/client  │           │snomed/client│
+    │ (page, md) │              │ (GOV.UK API) │           │ (Snowstorm) │
+    └─────┬──────┘              └──────┬───────┘           └──────┬──────┘
+          │                            │                          │
+          └────────────────────────────┼──────────────────────────┘
+                                       │
+                              ┌────────▼────────┐
+                              │ scraper/client  │
+                              │ (rate-limited   │
+                              │  httpx)         │
+                              └────────┬────────┘
+                                       │
+                              ┌────────▼────────┐
+                              │   PostgreSQL    │
+                              │ scraped_pages   │
+                              │ snomed_concepts │
+                              └─────────────────┘
+```
+
+**Layer rules (enforced by style tests):**
+- `scraper/` is source-independent — no imports from `domains`, `tasks`, or `main`
+- `domains/models.py` and `domains/*/config.py` and `domains/snomed/models.py` are dependency-free
+- Domain-specific parsing logic (NICE index, MHRA JSON, SNOMED API) lives inside the domain package, not in `scraper/`
 
 ## Running Tests
 
@@ -103,35 +250,8 @@ All four domains (`/conditions/`, `/symptoms/`, `/medicines/`, `/treatments/`) e
 make test
 ```
 
-## Project Structure
-
-```
-├── main.py                          # FastAPI app, lifespan, search endpoint
-├── config.py                        # Scraper rate-limiting config
-├── db.py                            # SQLAlchemy async ORM + CRUD
-├── tasks.py                         # In-memory background task store
-├── scraper/
-│   ├── client.py                    # Rate-limited httpx client
-│   ├── index.py                     # A-Z index page parser
-│   ├── page.py                      # Detail page + sub-tab parser
-│   └── markdown.py                  # HTML → markdown converter
-├── domains/
-│   ├── models.py                    # Shared response models
-│   └── nhs/
-│       ├── config.py                # NHS base URL + domain registry
-│       ├── models.py                # NHS response models
-│       ├── service.py               # Scrape orchestration
-│       ├── conditions/router.py     # Conditions endpoints
-│       ├── symptoms/router.py       # Symptoms endpoints
-│       ├── medicines/router.py      # Medicines endpoints
-│       └── treatments/router.py     # Treatments endpoints
-├── tests/                           # Unit tests
-├── tests/style/                     # AST-based style tests
-├── Dockerfile
-├── docker-compose.yml
-└── Makefile
-```
+Style tests enforce complexity limits (function length, nesting depth, cyclomatic complexity), architecture layer boundaries, no dead private code, no security anti-patterns, and public docstring coverage — all automatically via AST analysis.
 
 ## License
 
-This project is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
+[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE)

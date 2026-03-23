@@ -5,10 +5,9 @@ from __future__ import annotations
 import asyncio
 
 import db
-from domains.models import TaskResponse
+from domains.models import ItemContent, ItemSummary, TaskResponse
 from domains.mhra.config import DSU_DOMAIN
 from domains.mhra.service import scrape_all_dsu, scrape_one_dsu
-from domains.nhs.models import ItemContent, ItemSummary
 from fastapi import APIRouter, HTTPException
 from tasks import create_task, get_active_scrape, register_async_task, set_active_scrape
 
