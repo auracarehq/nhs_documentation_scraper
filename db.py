@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
-from sqlalchemy import String, Text, select, delete as sa_delete, func
+from sqlalchemy import Boolean, String, Text, select, delete as sa_delete, func
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -32,6 +32,22 @@ class ScrapedPage(Base):
     next_review_due: Mapped[str] = mapped_column(String, nullable=False, default="")
     markdown: Mapped[str] = mapped_column(Text, nullable=False)
     scraped_at: Mapped[datetime] = mapped_column(
+        nullable=False, default=lambda: datetime.now(timezone.utc),
+    )
+
+
+class SnomedConcept(Base):
+    """A locally cached SNOMED CT concept fetched from the Snowstorm API."""
+
+    __tablename__ = "snomed_concepts"
+
+    concept_id: Mapped[str] = mapped_column(String, primary_key=True)
+    preferred_term: Mapped[str] = mapped_column(String, nullable=False)
+    fsn: Mapped[str] = mapped_column(String, nullable=False)
+    hierarchy: Mapped[str] = mapped_column(String, nullable=False, default="")
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    raw_json: Mapped[str] = mapped_column(Text, nullable=False)
+    cached_at: Mapped[datetime] = mapped_column(
         nullable=False, default=lambda: datetime.now(timezone.utc),
     )
 
@@ -147,3 +163,80 @@ async def search_pages(_session_or_pool, query: str) -> list[dict]:
             .order_by(ScrapedPage.name)
         )
         return [{"slug": r.slug, "name": r.name, "domain": r.domain} for r in result.all()]
+
+
+async def cache_snomed_concept(
+    concept_id: str,
+    preferred_term: str,
+    fsn: str,
+    hierarchy: str,
+    active: bool,
+    raw_json: str,
+) -> None:
+    """Insert or update a cached SNOMED CT concept."""
+    async with get_session() as session:
+        existing = await session.get(SnomedConcept, concept_id)
+        if existing:
+            existing.preferred_term = preferred_term
+            existing.fsn = fsn
+            existing.hierarchy = hierarchy
+            existing.active = active
+            existing.raw_json = raw_json
+            existing.cached_at = datetime.now(timezone.utc)
+        else:
+            session.add(SnomedConcept(
+                concept_id=concept_id,
+                preferred_term=preferred_term,
+                fsn=fsn,
+                hierarchy=hierarchy,
+                active=active,
+                raw_json=raw_json,
+            ))
+        await session.commit()
+
+
+async def get_snomed_concept(concept_id: str) -> dict | None:
+    """Fetch a single cached SNOMED CT concept by ID."""
+    async with get_session() as session:
+        row = await session.get(SnomedConcept, concept_id)
+        if row is None:
+            return None
+        return {
+            "concept_id": row.concept_id,
+            "preferred_term": row.preferred_term,
+            "fsn": row.fsn,
+            "hierarchy": row.hierarchy,
+            "active": row.active,
+            "raw_json": row.raw_json,
+            "cached_at": row.cached_at,
+        }
+
+
+async def list_snomed_concepts() -> list[dict]:
+    """Return all cached SNOMED CT concepts, ordered by preferred term."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(SnomedConcept).order_by(SnomedConcept.preferred_term)
+        )
+        return [
+            {
+                "concept_id": r.concept_id,
+                "preferred_term": r.preferred_term,
+                "fsn": r.fsn,
+                "hierarchy": r.hierarchy,
+                "active": r.active,
+                "raw_json": r.raw_json,
+                "cached_at": r.cached_at,
+            }
+            for r in result.scalars()
+        ]
+
+
+async def delete_snomed_concept(concept_id: str) -> bool:
+    """Delete a cached SNOMED CT concept. Returns True if a row was removed."""
+    async with get_session() as session:
+        result = await session.execute(
+            sa_delete(SnomedConcept).where(SnomedConcept.concept_id == concept_id)
+        )
+        await session.commit()
+        return result.rowcount > 0

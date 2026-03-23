@@ -10,6 +10,10 @@ LAYER_RULES: list[tuple[str, list[str], str]] = [
     ("domains/models.py", ["scraper", "db", "tasks", "main"], "domain models must stay dependency-free"),
     ("domains/nhs/models.py", ["scraper", "db", "tasks", "main"], "NHS models must stay dependency-free"),
     ("domains/nhs/config.py", ["scraper", "db", "tasks", "main"], "NHS config must stay dependency-free"),
+    ("domains/nice/config.py", ["scraper", "db", "tasks", "main"], "NICE config must stay dependency-free"),
+    ("domains/mhra/config.py", ["scraper", "db", "tasks", "main"], "MHRA config must stay dependency-free"),
+    ("domains/snomed/models.py", ["scraper", "db", "tasks", "main"], "SNOMED models must stay dependency-free"),
+    ("domains/snomed/config.py", ["scraper", "db", "tasks", "main"], "SNOMED config must stay dependency-free"),
 ]
 
 

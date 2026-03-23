@@ -159,3 +159,118 @@ def test_search_cross_domain(client):
         assert len(results) == 2
         domains = {r["domain"] for r in results}
         assert domains == {"conditions", "medicines"}
+
+
+# ---------------------------------------------------------------------------
+# NICE routers
+# ---------------------------------------------------------------------------
+
+def test_nice_cks_router_exists(client):
+    with patch("db.get_pool"), patch("db.list_pages", new_callable=AsyncMock, return_value=[]):
+        resp = client.get("/nice/cks/")
+        assert resp.status_code == 200
+
+
+def test_nice_bnf_router_exists(client):
+    with patch("db.get_pool"), patch("db.list_pages", new_callable=AsyncMock, return_value=[]):
+        resp = client.get("/nice/bnf/")
+        assert resp.status_code == 200
+
+
+def test_nice_bnfc_router_exists(client):
+    with patch("db.get_pool"), patch("db.list_pages", new_callable=AsyncMock, return_value=[]):
+        resp = client.get("/nice/bnfc/")
+        assert resp.status_code == 200
+
+
+def test_nice_cks_get_not_found(client):
+    with patch("db.get_pool"), patch("db.get_page", new_callable=AsyncMock, return_value=None):
+        resp = client.get("/nice/cks/nonexistent")
+        assert resp.status_code == 404
+
+
+def test_nice_bnf_scrape_returns_task_id(client):
+    with patch("domains.nice.service.scrape_nice_index", new_callable=AsyncMock, return_value=[]):
+        resp = client.post("/nice/bnf/scrape")
+        assert resp.status_code == 200
+        assert "task_id" in resp.json()
+
+
+# ---------------------------------------------------------------------------
+# MHRA router
+# ---------------------------------------------------------------------------
+
+def test_mhra_dsu_router_exists(client):
+    with patch("db.get_pool"), patch("db.list_pages", new_callable=AsyncMock, return_value=[]):
+        resp = client.get("/mhra/drug-safety-updates/")
+        assert resp.status_code == 200
+
+
+def test_mhra_dsu_get_not_found(client):
+    with patch("db.get_pool"), patch("db.get_page", new_callable=AsyncMock, return_value=None):
+        resp = client.get("/mhra/drug-safety-updates/nonexistent")
+        assert resp.status_code == 404
+
+
+def test_mhra_dsu_scrape_returns_task_id(client):
+    with patch("domains.mhra.service._fetch_all_listings", new_callable=AsyncMock, return_value=[]):
+        resp = client.post("/mhra/drug-safety-updates/scrape")
+        assert resp.status_code == 200
+        assert "task_id" in resp.json()
+
+
+# ---------------------------------------------------------------------------
+# SNOMED CT router
+# ---------------------------------------------------------------------------
+
+def test_snomed_search_missing_query(client):
+    resp = client.get("/snomed/concepts")
+    assert resp.status_code == 422
+
+
+def test_snomed_search_too_short(client):
+    resp = client.get("/snomed/concepts?q=a")
+    assert resp.status_code == 422
+
+
+def test_snomed_search_returns_result(client):
+    mock_result = {
+        "items": [{"conceptId": "73211009", "active": True,
+                   "pt": {"term": "Diabetes mellitus"}, "fsn": {"term": "Diabetes mellitus (disorder)"}}],
+        "total": 1, "limit": 25, "offset": 0,
+    }
+    with patch("domains.snomed.service.search_concepts", new_callable=AsyncMock, return_value=mock_result):
+        resp = client.get("/snomed/concepts?q=diabetes")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["concept_id"] == "73211009"
+        assert data["items"][0]["preferred_term"] == "Diabetes mellitus"
+
+
+def test_snomed_list_cached_empty(client):
+    with patch("db.list_snomed_concepts", new_callable=AsyncMock, return_value=[]):
+        resp = client.get("/snomed/cached")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+
+def test_snomed_get_concept_from_cache(client):
+    cached = {
+        "concept_id": "73211009", "preferred_term": "Diabetes mellitus",
+        "fsn": "Diabetes mellitus (disorder)", "hierarchy": "disorder",
+        "active": True, "raw_json": "{}", "cached_at": "2024-01-01T00:00:00+00:00",
+    }
+    with patch("db.get_snomed_concept", new_callable=AsyncMock, return_value=cached):
+        resp = client.get("/snomed/concepts/73211009")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["concept_id"] == "73211009"
+        assert data["hierarchy"] == "disorder"
+        assert data["cached"] is True
+
+
+def test_snomed_delete_concept_not_cached(client):
+    with patch("db.delete_snomed_concept", new_callable=AsyncMock, return_value=False):
+        resp = client.delete("/snomed/concepts/73211009")
+        assert resp.status_code == 404

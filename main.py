@@ -4,10 +4,15 @@ from fastapi import FastAPI, HTTPException
 
 import db
 from domains.models import SearchResult, TaskStatusResponse
+from domains.mhra.safety_updates.router import router as mhra_dsu_router
 from domains.nhs.conditions.router import router as conditions_router
 from domains.nhs.medicines.router import router as medicines_router
 from domains.nhs.symptoms.router import router as symptoms_router
 from domains.nhs.treatments.router import router as treatments_router
+from domains.nice.bnf.router import router as bnf_router
+from domains.nice.bnfc.router import router as bnfc_router
+from domains.nice.cks.router import router as cks_router
+from domains.snomed.router import router as snomed_router
 from scraper.client import close_client, init_client
 from tasks import cancel_task, get_task
 
@@ -22,20 +27,33 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="NHS Health A-Z Scraper",
+    title="Clinical Knowledge Scraper",
     description=(
-        "Scrapes the NHS Health A-Z website and stores content in PostgreSQL "
-        "as markdown with YAML frontmatter. Covers Conditions, Symptoms, Medicines, and "
-        "Tests & Treatments."
+        "Scrapes clinical guidance sources and stores content in PostgreSQL as markdown "
+        "with YAML frontmatter. Sources: NHS Health A-Z (conditions, symptoms, medicines, "
+        "treatments), NICE (CKS, BNF, BNFc), MHRA Drug Safety Updates, and SNOMED CT "
+        "concept lookup via the Snowstorm API."
     ),
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
+# NHS Health A-Z
 app.include_router(conditions_router)
 app.include_router(symptoms_router)
 app.include_router(medicines_router)
 app.include_router(treatments_router)
+
+# NICE (CKS, BNF, BNFc)
+app.include_router(cks_router)
+app.include_router(bnf_router)
+app.include_router(bnfc_router)
+
+# MHRA Drug Safety Updates
+app.include_router(mhra_dsu_router)
+
+# SNOMED CT
+app.include_router(snomed_router)
 
 
 @app.get(
