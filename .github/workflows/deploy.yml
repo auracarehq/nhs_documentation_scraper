@@ -37,6 +37,7 @@ jobs:
         run: |
           az acr build \
             --registry acrclinicalapi \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
             --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
             --image ${{ env.IMAGE_NAME }}:latest \
             --file Dockerfile \
