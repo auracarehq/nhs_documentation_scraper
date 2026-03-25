@@ -1,10 +1,13 @@
 """SNOMED CT Snowstorm API configuration."""
 
-# Public IHTSDO Snowstorm browser instance.
-# All requests go through scraper.client.fetch() which enforces MAX_CONCURRENT
-# and REQUEST_DELAY, so the shared rate limiter already applies here.
-# For a self-hosted or NHS ontology server, update SNOWSTORM_BASE only.
-SNOWSTORM_BASE = "https://browser.ihtsdotools.org/snowstorm/snomed-ct"
+import os
+
+# Self-hosted Snowstorm instance (Azure Container Apps, UK South).
+# Falls back to public IHTSDO browser instance if env var not set.
+SNOWSTORM_BASE = os.environ.get(
+    "SNOWSTORM_BASE",
+    "https://snowstorm.platform.auracare.org.uk/snowstorm/snomed-ct",
+)
 
 # SNOMED CT UK Clinical Edition branch
 UK_BRANCH = "MAIN/SNOMEDCT-UK"

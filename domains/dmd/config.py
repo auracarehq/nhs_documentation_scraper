@@ -1,7 +1,12 @@
 """dm+d domain configuration."""
 
+import os
+
 # Snowstorm (SNOMED CT UK Drug Extension) — same base used by snomed domain
-SNOWSTORM_BASE = "https://snowstorm.ihtsdotools.org/snowstorm/snomed-ct"
+SNOWSTORM_BASE = os.environ.get(
+    "SNOWSTORM_BASE",
+    "https://snowstorm.platform.auracare.org.uk/snowstorm/snomed-ct",
+)
 UK_BRANCH_ENCODED = "MAIN%2FSNOMEDCT-UK"
 
 # ECL expression for all medicinal products
