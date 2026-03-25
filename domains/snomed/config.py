@@ -9,9 +9,9 @@ SNOWSTORM_BASE = os.environ.get(
     "https://snowstorm.platform.auracare.org.uk/snowstorm/snomed-ct",
 )
 
-# SNOMED CT UK Clinical Edition branch
-UK_BRANCH = "MAIN/SNOMEDCT-UK"
-UK_BRANCH_ENCODED = "MAIN%2FSNOMEDCT-UK"
+# Branch where UK Edition data lives on our self-hosted Snowstorm
+UK_BRANCH = os.environ.get("SNOWSTORM_BRANCH", "MAIN")
+UK_BRANCH_ENCODED = UK_BRANCH.replace("/", "%2F")
 
 DEFAULT_LIMIT = 25
 MAX_LIMIT = 200

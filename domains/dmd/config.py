@@ -7,7 +7,7 @@ SNOWSTORM_BASE = os.environ.get(
     "SNOWSTORM_BASE",
     "https://snowstorm.platform.auracare.org.uk/snowstorm/snomed-ct",
 )
-UK_BRANCH_ENCODED = "MAIN%2FSNOMEDCT-UK"
+UK_BRANCH_ENCODED = os.environ.get("SNOWSTORM_BRANCH", "MAIN").replace("/", "%2F")
 
 # ECL expression for all medicinal products
 MEDICINAL_PRODUCT_ECL = "<763158003"
