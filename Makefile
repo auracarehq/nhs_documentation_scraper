@@ -1,4 +1,4 @@
-.PHONY: up down build test logs clean
+.PHONY: up down build test logs clean hooks
 
 up:
 	docker compose up --build -d
@@ -14,6 +14,9 @@ test:
 
 logs:
 	docker compose logs -f
+
+hooks:
+	pre-commit install
 
 clean:
 	docker compose down -v
